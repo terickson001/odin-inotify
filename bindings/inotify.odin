@@ -2,10 +2,10 @@ package bindings
 
 import "core:c"
 import "core:os"
-foreign import "system:c"
+foreign import libc "system:c"
 
 @(link_prefix="inotify_")
-foreign inotify
+foreign libc
 {
     init  :: proc() -> os.Handle ---;
     init1 :: proc(flags: c.int) -> os.Handle ---;
