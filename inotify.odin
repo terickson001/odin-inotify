@@ -15,35 +15,50 @@ Event :: struct
      name:   string,  /* Optional name */
 }
 
-Watch_Descriptor :: distinct os.Handle;
-
-Event_Kind :: enum u16
+Event_Kind :: enum u8
 {
-     Access = bind.IN_ACCESS,
-     Modify = bind.IN_MODIFY,
-     Attrib = bind.IN_ATTRIB,
-     Close_Write = bind.IN_CLOSE_WRITE,
-     Close_NoWrite = bind.IN_CLOSE_NOWRITE,
-     Open = bind.IN_OPEN,
-     Moved_From = bind.IN_MOVED_FROM,
-     Moved_To = bind.IN_MOVED_TO,
-     Create = bind.IN_CREATE,
-     Delete = bind.IN_DELETE,
-     Delete_Self = bind.IN_DELETE_SELF,
-     Move_Self = bind.IN_MOVE_SELF,
+     Access,
+     Modify,
+     Attrib,
+     Close_Write,
+     Close_NoWrite,
+     Open,
+     Moved_From,
+     Moved_To,
+     Create,
+     Delete,
+     Delete_Self,
+     Move_Self,
+     _,
+     Unmount,
+     Q_Overflow,
+     Ignored,
+     
+     Only_Dir = 24,
+     Dont_Follow,
+     Excl_Link,
+     _,
+     Mask_Create,
+     Mask_Add,
+     Is_Dir,
+     One_Shot,
 }
+
+Event_Mask :: bit_set[Event_Kind; u32];
 
 init  :: proc() -> os.Handle { return bind.init() }
 init1 :: proc(flags: int) -> os.Handle { return bind.init1(c.int(flags)) }
 
-add_watch :: proc(fd: os.Handle, pathname: string, mask: Event_Kind) -> Watch_Descriptor
+add_watch :: proc(fd: os.Handle, pathname: string, mask: Event_Mask) -> (os.Handle, os.Errno)
 {
      c_pathname := strings.clone_to_cstring(pathname, context.temp_allocator);
-     defer delete(c_pathname);
-     return Watch_Descriptor(bind.add_watch(fd, (^byte)(c_pathname), u32(mask)));
+     wd := bind.add_watch(fd, (^byte)(c_pathname), transmute(u32)mask);
+     if wd == -1 do
+         return os.INVALID_HANDLE, os.Errno(os.get_last_error());
+     return cast(os.Handle)wd, os.ERROR_NONE;
 }
 
-rm_watch :: proc(fd: os.Handle, wd: Watch_Descriptor) -> int
+rm_watch :: proc(fd: os.Handle, wd: os.Handle) -> int
 {
      return int(bind.rm_watch(fd, os.Handle(wd)));
 }
@@ -56,7 +71,6 @@ read_events :: proc(fd: os.Handle, count := 16, allocator := context.allocator) 
      length, ok := os.read(fd, bytes[:]);
      if ok != 0 do return out;
      i := 0;
-     fmt.printf("READING\n");
      for i < length
          {
          bevent := (^bind.Event)(&bytes[i]);
@@ -65,12 +79,16 @@ read_events :: proc(fd: os.Handle, count := 16, allocator := context.allocator) 
          event.mask = bevent.mask;
          event.cookie = bevent.cookie;
          
-         #no_bounds_check event.name = strings.clone(cast(string)mem.slice_ptr(&bevent.name[0], int(bevent.length)));
+         n := 0;
+         for n < int(bevent.length) && #no_bounds_check bevent.name[n] != 0 do
+             n += 1;
+         #no_bounds_check name_slice := mem.slice_ptr(&bevent.name[0], n);
+         
+         event.name = strings.clone(cast(string)name_slice);
          append(&out, event);
          
          i += size_of(bind.Event)+int(bevent.length);
      }
-     fmt.printf("EVENTS READ: %d\n", len(out));
      return out;
 }
 
