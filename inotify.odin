@@ -53,8 +53,10 @@ add_watch :: proc(fd: os.Handle, pathname: string, mask: Event_Mask) -> (os.Hand
 {
      c_pathname := strings.clone_to_cstring(pathname, context.temp_allocator);
      wd := bind.add_watch(fd, (^byte)(c_pathname), transmute(u32)mask);
-     if wd == -1 do
+     if wd == -1 
+     {
          return os.INVALID_HANDLE, os.Errno(os.get_last_error());
+     }
      return cast(os.Handle)wd, os.ERROR_NONE;
 }
 
@@ -80,8 +82,10 @@ read_events :: proc(fd: os.Handle, count := 16, allocator := context.allocator) 
          event.cookie = bevent.cookie;
          
          n := 0;
-         for n < int(bevent.length) && #no_bounds_check bevent.name[n] != 0 do
+         for n < int(bevent.length) && #no_bounds_check bevent.name[n] != 0 
+         {
              n += 1;
+         }
          #no_bounds_check name_slice := mem.slice_ptr(&bevent.name[0], n);
          
          event.name = strings.clone(cast(string)name_slice);
@@ -94,7 +98,9 @@ read_events :: proc(fd: os.Handle, count := 16, allocator := context.allocator) 
 
 free_events :: proc(buffer: [dynamic]Event)
 {
-     for event in buffer do
+     for event in buffer 
+     {
          delete(event.name);
+     }
      delete(buffer);
 }
